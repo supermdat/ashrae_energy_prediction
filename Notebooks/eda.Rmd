@@ -108,18 +108,80 @@ glimpse(files_list)
 
 ```{r}
 
-files_list$train.csv %>% 
+cnts_bldg_mtr <-
+  files_list$train.csv %>% 
   count(building_id,
         meter,
         # timestamp
-        )
+        ) %>% 
+  arrange(building_id,
+          meter
+          )
 
-files_list$train.csv %>% 
+cnts_bldg_mtr
+
+cnts_bldg_mtr_reading_abv_zero <-
+  files_list$train.csv %>% 
   filter(meter_reading > 0) %>% 
   count(building_id,
         meter,
         # timestamp
+        ) %>% 
+  arrange(building_id,
+          meter
+          )
+
+cnts_bldg_mtr_reading_abv_zero
+
+
+cnts_mtr <-
+  cnts_bldg_mtr %>% 
+  count(meter,
+        wt = n
         )
+
+cnts_mtr
+
+
+cnts_mtr_reading_abv_zero <-
+  cnts_bldg_mtr_reading_abv_zero %>% 
+  count(meter,
+        wt = n
+        )
+
+cnts_mtr_reading_abv_zero
+
+```
+
+
+
+```{r}
+
+bldg_7 <-
+  files_list$train.csv %>% 
+  filter(building_id == 7)
+
+bldg_7_mtr_0 <-
+  files_list$train.csv %>% 
+  filter(building_id == 7 &
+           meter == 0
+         )
+
+glimpse(bldg_1_mtr_0)
+summary(bldg_1_mtr_0)
+View(bldg_1_mtr_0)
+
+
+bldg_7 %>% 
+  ggplot(aes(x = timestamp,
+             y = meter_reading
+             )
+         ) +
+  geom_line() +
+  facet_wrap(vars(meter),
+             scales = "free"
+             ) +
+  theme_minimal()
 
 ```
 
