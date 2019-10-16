@@ -1,9 +1,8 @@
 ---
-title: "R Notebook"
+title: "ASHRAE Energy Prediction - Exploratory Data Analysis"
 output: html_notebook
 ---
 
-This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
 
 ## Setup    
   Load the relevant libraries.
@@ -184,4 +183,6 @@ bldg_7 %>%
   theme_minimal()
 
 ```
+
+
 
