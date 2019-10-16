@@ -150,6 +150,10 @@ cnts_mtr_reading_abv_zero <-
 
 cnts_mtr_reading_abv_zero
 
+
+files_list$building_metadata.csv %>% 
+  count(primary_use)
+
 ```
 
 
