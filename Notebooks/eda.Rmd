@@ -1,9 +1,8 @@
 ---
-title: "R Notebook"
+title: "ASHRAE Energy Prediction - Exploratory Data Analysis"
 output: html_notebook
 ---
 
-This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
 
 ## Setup    
   Load the relevant libraries.
@@ -91,11 +90,17 @@ file_names <-
 
 files_list <-
   file_names %>% 
-  map(~read_csv(file = paste0(wd,
-                              "/Data/Raw/",
-                              .x
-                              )
-                )
+  # map(~read_csv(file = paste0(wd,
+  #                             "/Data/Raw/",
+  #                             .x
+  #                             )
+  #               )
+  #     )
+  map(~fread(file = paste0(wd,
+                           "/Data/Raw/",
+                           .x
+                           )
+             )
       )
 
 names(files_list) <- file_names
@@ -151,6 +156,10 @@ cnts_mtr_reading_abv_zero <-
 
 cnts_mtr_reading_abv_zero
 
+
+files_list$building_metadata.csv %>% 
+  count(primary_use)
+
 ```
 
 
@@ -159,22 +168,43 @@ cnts_mtr_reading_abv_zero
 
 bldg_7 <-
   files_list$train.csv %>% 
-  filter(building_id == 7)
+  filter(building_id == 7) %>% 
+  mutate(timestamp = as_datetime(timestamp)
+         )
 
 bldg_7_mtr_0 <-
   files_list$train.csv %>% 
   filter(building_id == 7 &
            meter == 0
+         ) %>% 
+  mutate(timestamp = as_datetime(timestamp)
          )
 
-glimpse(bldg_1_mtr_0)
-summary(bldg_1_mtr_0)
-View(bldg_1_mtr_0)
+glimpse(bldg_7_mtr_0)
+summary(bldg_7_mtr_0)
+View(bldg_7_mtr_0)
 
 
 bldg_7 %>% 
+  mutate(meter_reading_log = log(meter_reading + 1)
+         ) %>% 
   ggplot(aes(x = timestamp,
              y = meter_reading
+             # y = meter_reading_log
+             )
+         ) +
+  geom_line() +
+  facet_wrap(vars(meter),
+             scales = "free"
+             ) +
+  theme_minimal()
+
+bldg_7 %>% 
+  mutate(meter_reading_log = log(meter_reading + 1)
+         ) %>% 
+  ggplot(aes(x = timestamp,
+             # y = meter_reading
+             y = meter_reading_log
              )
          ) +
   geom_line() +
@@ -184,4 +214,49 @@ bldg_7 %>%
   theme_minimal()
 
 ```
+
+
+
+```{r}
+
+joined_data <-
+  files_list$train.csv %>% 
+  left_join(y = files_list$building_metadata.csv,
+            by = c("building_id" = "building_id")
+            ) %>% 
+  left_join(y = files_list$weather_train.csv,
+            by = c("site_id" = "site_id",
+                   "timestamp" = "timestamp"
+                   )
+            ) %>% 
+  mutate(timestamp = as_datetime(timestamp),
+         meter_reading_log = log(meter_reading + 1)
+         ) %>% 
+  mutate_if(is_character, factor) %>% 
+  arrange(building_id,
+          meter,
+          timestamp
+          )
+
+# dim(joined_data)
+glimpse(joined_data)
+View(head(joined_data, 1000))
+
+```
+
+
+```{r}
+
+joined_data %>% 
+  count(primary_use) %>% 
+  left_join(joined_data %>% 
+              filter(meter_reading_log > 0) %>% 
+              count(primary_use) %>% 
+              rename(n_reading_abv_0 = n),
+            by = "primary_use"
+            ) %>% 
+  mutate(n_reading_abv_0_pct = n_reading_abv_0 / n)
+            
+```
+
 
