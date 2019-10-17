@@ -65,6 +65,9 @@ require("knitr")
 # Use when running from laptop
 opts_knit$set(root.dir = "/Users/mdturse/Desktop/Analytics/ashrae_energy_prediction/")
 
+# Use when running from Sparkfund laptop
+# opts_knit$set(root.dir = "/Users/danielturse/Desktop/Projects/ashrae_energy_prediction/")
+
 ```
   
     
@@ -163,84 +166,106 @@ files_list$building_metadata.csv %>%
 ```
 
 
-
 ```{r}
 
-bldg_7 <-
-  files_list$train.csv %>% 
-  filter(building_id == 7) %>% 
-  mutate(timestamp = as_datetime(timestamp)
+joined_data <-
+  # files_list$train.csv %>%
+  # left_join(y = files_list$building_metadata.csv,
+  #           by = c("building_id" = "building_id")
+  #           ) %>%
+  # left_join(y = files_list$weather_train.csv,
+  #           by = c("site_id" = "site_id",
+  #                  "timestamp" = "timestamp"
+  #                  )
+  #           ) %>%
+  # mutate(timestamp = as_datetime(timestamp),
+  #        meter_reading_log = log(meter_reading + 1)
+  #        ) %>%
+  # mutate_if(is_character, factor) %>%
+  # arrange(building_id,
+  #         meter,
+  #         timestamp
+  #         )
+  merge(x = files_list$train.csv,
+        y = files_list$building_metadata.csv,
+        by.x = "building_id",
+        by.y = "building_id",
+        all.x = TRUE
+        )
+
+joined_data <-
+  merge(x = joined_data,
+        y = files_list$weather_train.csv,
+        by.x = c("site_id", "timestamp"),
+        by.y = c("site_id", "timestamp"),
+        all.x = TRUE
+        )
+
+joined_data <-
+  joined_data[ , `:=` (timestamp = as_datetime(timestamp),
+                       primary_use = factor(primary_use),
+                       meter_reading_log = log(meter_reading + 1)
+                       )
+               ] %>% 
+  setkey(building_id,
+         meter,
+         timestamp
          )
 
-bldg_7_mtr_0 <-
-  files_list$train.csv %>% 
-  filter(building_id == 7 &
-           meter == 0
-         ) %>% 
-  mutate(timestamp = as_datetime(timestamp)
-         )
 
-glimpse(bldg_7_mtr_0)
-summary(bldg_7_mtr_0)
-View(bldg_7_mtr_0)
-
-
-bldg_7 %>% 
-  mutate(meter_reading_log = log(meter_reading + 1)
-         ) %>% 
-  ggplot(aes(x = timestamp,
-             y = meter_reading
-             # y = meter_reading_log
-             )
-         ) +
-  geom_line() +
-  facet_wrap(vars(meter),
-             scales = "free"
-             ) +
-  theme_minimal()
-
-bldg_7 %>% 
-  mutate(meter_reading_log = log(meter_reading + 1)
-         ) %>% 
-  ggplot(aes(x = timestamp,
-             # y = meter_reading
-             y = meter_reading_log
-             )
-         ) +
-  geom_line() +
-  facet_wrap(vars(meter),
-             scales = "free"
-             ) +
-  theme_minimal()
+# dim(joined_data)
+class(joined_data)
+str(joined_data)
+glimpse(joined_data)
+# View(head(joined_data, 1000))
 
 ```
 
 
-
 ```{r}
 
-joined_data <-
-  files_list$train.csv %>% 
-  left_join(y = files_list$building_metadata.csv,
-            by = c("building_id" = "building_id")
-            ) %>% 
-  left_join(y = files_list$weather_train.csv,
-            by = c("site_id" = "site_id",
-                   "timestamp" = "timestamp"
-                   )
-            ) %>% 
-  mutate(timestamp = as_datetime(timestamp),
-         meter_reading_log = log(meter_reading + 1)
-         ) %>% 
-  mutate_if(is_character, factor) %>% 
-  arrange(building_id,
-          meter,
-          timestamp
-          )
+split_first_10_bldgs <-
+  joined_data[building_id < 10] %>% 
+  split(.$building_id)
 
-# dim(joined_data)
-glimpse(joined_data)
-View(head(joined_data, 1000))
+# split_first_10_bldgs$`0` %>% 
+#   pivot_longer(cols = c(meter_reading, meter_reading_log),
+#                names_to = "reading_type",
+#                values_to = "reading_value"
+#                ) %>% 
+#   View()
+
+line_plots <-
+  pmap(.l = list(a = split_first_10_bldgs,
+                 b = names(split_first_10_bldgs)
+                 ),
+       .f = function(a, b) {
+         a %>% 
+           pivot_longer(cols = c(meter_reading, meter_reading_log),
+                        names_to = "reading_type",
+                        values_to = "reading_value"
+                        ) %>% 
+           ggplot(#data = a,
+                  aes(x = timestamp,
+                      y = reading_value,
+                      # y = meter_reading_log,
+                      colour = factor(meter)
+                      )
+                  ) +
+           geom_line() +
+           facet_wrap(vars(meter, reading_type),
+                      scales = "free"
+                      ) +
+           labs(title = paste0("building_id: ", b)
+                ) +
+           theme_minimal() +
+           theme(legend.position = "none")
+         }
+       )
+
+line_plots
+
+
 
 ```
 
@@ -258,5 +283,43 @@ joined_data %>%
   mutate(n_reading_abv_0_pct = n_reading_abv_0 / n)
             
 ```
+  
+    
+  Inspect if train and test have the same combinations of `building_id` and `meter`.
+```{r}
 
+bldg_mtr_train <-
+  files_list$train.csv[ ,
+                       list(building_id, meter)
+                       ][ ,
+                         bldg_mtr := paste0(building_id, "_", meter)
+                         ][order(building_id,
+                                 meter
+                                 )
+                           ]
+
+message("bldg_mtr_train")
+str(bldg_mtr_train)
+
+
+bldg_mtr_test <-
+  files_list$test.csv[ ,
+                       list(building_id, meter)
+                       ][ ,
+                          bldg_mtr := paste0(building_id, "_", meter)
+                          ][order(building_id,
+                                  meter
+                                  )
+                            ]
+
+message("bldg_mtr_test")
+str(bldg_mtr_test)
+
+
+message("setdiff")
+setdiff(x = unique(bldg_mtr_train$bldg_mtr),
+        y = unique(bldg_mtr_test$bldg_mtr)
+        )
+
+```
 
