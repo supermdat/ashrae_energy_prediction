@@ -283,5 +283,43 @@ joined_data %>%
   mutate(n_reading_abv_0_pct = n_reading_abv_0 / n)
             
 ```
+  
+    
+  Inspect if train and test have the same combinations of `building_id` and `meter`.
+```{r}
 
+bldg_mtr_train <-
+  files_list$train.csv[ ,
+                       list(building_id, meter)
+                       ][ ,
+                         bldg_mtr := paste0(building_id, "_", meter)
+                         ][order(building_id,
+                                 meter
+                                 )
+                           ]
+
+message("bldg_mtr_train")
+str(bldg_mtr_train)
+
+
+bldg_mtr_test <-
+  files_list$test.csv[ ,
+                       list(building_id, meter)
+                       ][ ,
+                          bldg_mtr := paste0(building_id, "_", meter)
+                          ][order(building_id,
+                                  meter
+                                  )
+                            ]
+
+message("bldg_mtr_test")
+str(bldg_mtr_test)
+
+
+message("setdiff")
+setdiff(x = unique(bldg_mtr_train$bldg_mtr),
+        y = unique(bldg_mtr_test$bldg_mtr)
+        )
+
+```
 
