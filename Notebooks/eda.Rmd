@@ -186,7 +186,11 @@ joined_data <-
   #         meter,
   #         timestamp
   #         )
-  merge(x = files_list$train.csv,
+  files_list$train.csv %>% 
+  bind_rows(files_list$test.csv,
+            .id = "data_type"
+            ) %>% 
+  merge(#x = files_list$train.csv,
         y = files_list$building_metadata.csv,
         by.x = "building_id",
         by.y = "building_id",
@@ -204,7 +208,11 @@ joined_data <-
 joined_data <-
   joined_data[ , `:=` (timestamp = as_datetime(timestamp),
                        primary_use = factor(primary_use),
-                       meter_reading_log = log(meter_reading + 1)
+                       meter_reading_log = log(meter_reading + 1),
+                       data_type = if_else(data_type == "1",
+                                           "train",
+                                           "test"
+                                           ) %>% factor()
                        )
                ] %>% 
   setkey(building_id,
@@ -224,8 +232,30 @@ glimpse(joined_data)
 
 ```{r}
 
+cnts_train_test_bld_mtr <-
+  joined_data[ ,
+              .(timestamp_min = min(timestamp, na.rm = TRUE),
+                timestamp_max = max(timestamp, na.rm = TRUE),
+                cnt_days = .N / 24
+                ),
+              by = list(data_type, building_id, meter)
+              ][order(building_id, meter, -data_type)]
+
+View(cnts_train_test_bld_mtr)
+# joined_data %>% 
+#   split(.$data_type) %>% 
+#   map(~summary(.x$meter_reading))
+
+```
+
+
+
+```{r}
+
 split_first_10_bldgs <-
-  joined_data[building_id < 10] %>% 
+  joined_data[building_id < 10 &
+                data_type == "train"
+              ] %>% 
   split(.$building_id)
 
 # split_first_10_bldgs$`0` %>% 
@@ -265,16 +295,14 @@ line_plots <-
 
 line_plots
 
-
-
 ```
 
 
 ```{r}
 
-joined_data %>% 
+joined_data[data_type == "train"] %>% 
   count(primary_use) %>% 
-  left_join(joined_data %>% 
+  left_join(joined_data[data_type == "train"] %>% 
               filter(meter_reading_log > 0) %>% 
               count(primary_use) %>% 
               rename(n_reading_abv_0 = n),
@@ -289,28 +317,28 @@ joined_data %>%
 ```{r}
 
 bldg_mtr_train <-
-  files_list$train.csv[ ,
-                       list(building_id, meter)
-                       ][ ,
-                         bldg_mtr := paste0(building_id, "_", meter)
-                         ][order(building_id,
-                                 meter
-                                 )
-                           ]
+  joined_data[data_type == "train",
+              list(building_id, meter)
+              ][ ,
+                bldg_mtr := paste0(building_id, "_", meter)
+                ][order(building_id,
+                        meter
+                        )
+                  ]
 
 message("bldg_mtr_train")
 str(bldg_mtr_train)
 
 
 bldg_mtr_test <-
-  files_list$test.csv[ ,
-                       list(building_id, meter)
-                       ][ ,
-                          bldg_mtr := paste0(building_id, "_", meter)
-                          ][order(building_id,
-                                  meter
-                                  )
-                            ]
+  joined_data[data_type == "test",
+              list(building_id, meter)
+              ][ ,
+                bldg_mtr := paste0(building_id, "_", meter)
+                ][order(building_id,
+                        meter
+                        )
+                  ]
 
 message("bldg_mtr_test")
 str(bldg_mtr_test)
@@ -321,5 +349,23 @@ setdiff(x = unique(bldg_mtr_train$bldg_mtr),
         y = unique(bldg_mtr_test$bldg_mtr)
         )
 
+
+
+rm(bldg_mtr_train, bldg_mtr_test)
+
 ```
+
+
+```{r}
+
+joined_data_train <-
+  joined_data[data_type == "train"]
+
+glimpse(joined_data_train)
+
+
+rm(joined_data)
+
+```
+
 
