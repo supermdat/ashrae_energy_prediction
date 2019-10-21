@@ -63,10 +63,10 @@ require("knitr")
 # opts_knit$set(root.dir = "/home/rstudio/Dropbox/_AWS/twitter_dc_metro2/")
 
 # Use when running from laptop
-# opts_knit$set(root.dir = "/Users/mdturse/Desktop/Analytics/ashrae_energy_prediction/")
+opts_knit$set(root.dir = "/Users/mdturse/Desktop/Analytics/ashrae_energy_prediction/")
 
 # Use when running from Sparkfund laptop
-opts_knit$set(root.dir = "/Users/danielturse/Desktop/Projects/ashrae_energy_prediction/")
+# opts_knit$set(root.dir = "/Users/danielturse/Desktop/Projects/ashrae_energy_prediction/")
 
 ```
   
