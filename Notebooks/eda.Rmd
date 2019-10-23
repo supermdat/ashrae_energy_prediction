@@ -15,9 +15,13 @@ output: html_notebook
 # data munging
 library("tidyverse")
 library("data.table")
+library("tidyquant")    # rolling calculations
 
 # munge dates
 library("lubridate")
+
+
+library("tictoc")
 
 # get tweets
 # library("rtweet")
@@ -95,7 +99,7 @@ wd
 ```
 
 
-## Get the data  
+## Get the Data  
 
 ```{r}
 
@@ -104,6 +108,8 @@ file_names <-
                            "/Data/Raw"
                            )
              )
+
+tic()
 
 files_list <-
   file_names %>% 
@@ -119,6 +125,9 @@ files_list <-
                            )
              )
       )
+
+toc()
+
 
 names(files_list) <-
   file_names %>% 
@@ -209,6 +218,8 @@ rm(cnts_bldg_mtr, cnts_bldg, cnts_mtr)
   Create a full dataset.
 ```{r}
 
+tic()
+
 joined_data <-
   # files_list$train %>%
   # left_join(y = files_list$building_metadata,
@@ -262,6 +273,8 @@ joined_data <-
          )
 
 
+toc()
+
 # dim(joined_data)
 class(joined_data)
 str(joined_data)
@@ -303,7 +316,7 @@ View(cnts_train_test_bld_mtr)
 rm(cnts_train_test_bld_mtr)
 
 ```
-
+  
     
   Counts of positive meter readings by `primary_use`.
 ```{r}
@@ -423,11 +436,179 @@ rm(files_list)
 ```
 
 
+## Feature Engineering
+
 
 ```{r}
 
-
+# joined_data %>% str()
+# View(joined_data %>% head(2000))
 
 ```
+
+
+
+```{r}
+
+# rolling_test_dt <-
+#   frollmean(joined_data[ ,
+#                         .(meter_reading_log),
+#                         by = list(building_id, meter)
+#                         ],
+#             n = c(24, (24*2), (24*7)
+#                   ),
+#             algo = "fast",
+#             align = "right"
+#             )
+# 
+# 
+# str(rolling_test_dt)
+# View(rolling_test_dt[[4]] %>% head(1000))
+
+```
+
+
+```{r}
+
+tic()
+
+rolling_test_zoo <-
+  joined_data[ ,
+               `:=` (mean_roll_1day = rollmean(x = meter_reading_log,
+                                               k = 24,
+                                               na.pad = TRUE,
+                                               align = "right"
+                                               ),
+                     mean_roll_2day = rollmean(x = meter_reading_log,
+                                               k = (24 * 2),
+                                               na.pad = TRUE,
+                                               align = "right"
+                                               ),
+                     mean_roll_7day = rollmean(x = meter_reading_log,
+                                               k = (24 * 7),
+                                               na.pad = TRUE,
+                                               align = "right"
+                                               )
+                     ),
+               by = list(building_id, meter)
+              ]
+
+toc()
+
+
+str(rolling_test_zoo)
+View(rolling_test_zoo %>% head(1000))
+
+
+# rm(joined_data)
+
+```
+
+
+
+```{r}
+
+split_first_10_bldgs <-
+  rolling_test_zoo[building_id < 10] %>% 
+  filter(mean_roll_1day > 0) %>% 
+  split(.$building_id)
+
+# split_first_10_bldgs$`0` %>% 
+#   pivot_longer(cols = c(meter_reading, meter_reading_log),
+#                names_to = "reading_type",
+#                values_to = "reading_value"
+#                ) %>% 
+#   View()
+
+line_plots <-
+  pmap(.l = list(a = split_first_10_bldgs,
+                 b = names(split_first_10_bldgs)
+                 ),
+       .f = function(a, b) {
+         a %>% 
+           pivot_longer(cols = c(meter_reading, meter_reading_log),
+                        names_to = "reading_type",
+                        values_to = "reading_value"
+                        ) %>% 
+           ggplot(#data = a,
+                  aes(x = timestamp,
+                      y = reading_value,
+                      # y = meter_reading_log,
+                      colour = factor(meter)
+                      )
+                  ) +
+           geom_line() +
+           facet_wrap(vars(meter, reading_type),
+                      scales = "free"
+                      ) +
+           labs(title = paste0("building_id: ", b)
+                ) +
+           theme_minimal() +
+           theme(legend.position = "none")
+         }
+       )
+
+line_plots
+
+
+rm(line_plots)
+
+```
+
+
+
+
+```{r}
+
+# # Custom function to return mean, sd, 95% conf interval
+# custom_stat_fun <- function(x, na.rm = TRUE) {
+#     # x     = numeric vector
+#     # na.rm = boolean, whether or not to remove NA's
+#     
+#     m  = mean(x, na.rm = na.rm)
+#     s  = sd(x, na.rm = na.rm)
+#     hi = m + 2*s
+#     lo = m - 2*s
+#     
+#     ret = c(mean = m,
+#             stdev = s,
+#             hi.95 = hi,
+#             lo.95 = lo
+#             )
+#     
+#     return(ret)
+#     }
+
+```
+
+
+```{r}
+
+# # Roll apply using custom stat function
+# rolling_test_tidyquant <-
+#   joined_data %>% 
+#   group_by(building_id,
+#            meter
+#            ) %>% 
+#   tq_mutate(
+#     select     = meter_reading_log,
+#     mutate_fun = rollapply, 
+#     # rollapply args
+#     width      = 24,
+#     align      = "right",
+#     by.column  = FALSE,
+#     FUN        = custom_stat_fun,
+#     # FUN args
+#     na.rm      = TRUE
+#     ) %>% 
+#   ungroup()
+# 
+# str(rolling_test_tidyquant)
+
+```
+
+
+
+
 
 
