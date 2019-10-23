@@ -59,11 +59,25 @@ sessionInfo()
 
 require("knitr")
 
+
 # Use when running from AWS
 # opts_knit$set(root.dir = "/home/rstudio/Dropbox/_AWS/twitter_dc_metro2/")
 
+
+if (str_detect(string = getwd(),
+               pattern = "mdturse"
+               )
+    ) {
+  # Use when running from laptop
+  opts_knit$set(root.dir = "/Users/mdturse/Desktop/Analytics/ashrae_energy_prediction/")
+  } else {
+    # Use when running from Sparkfund laptop
+    opts_knit$set(root.dir = "/Users/danielturse/Desktop/Projects/ashrae_energy_prediction/")
+  }
+
+
 # Use when running from laptop
-opts_knit$set(root.dir = "/Users/mdturse/Desktop/Analytics/ashrae_energy_prediction/")
+# opts_knit$set(root.dir = "/Users/mdturse/Desktop/Analytics/ashrae_energy_prediction/")
 
 # Use when running from Sparkfund laptop
 # opts_knit$set(root.dir = "/Users/danielturse/Desktop/Projects/ashrae_energy_prediction/")
@@ -106,74 +120,101 @@ files_list <-
              )
       )
 
-names(files_list) <- file_names
+names(files_list) <-
+  file_names %>% 
+  str_replace(pattern = ".csv",
+              replacement = ""
+              )
 
 glimpse(files_list)
 
 ```
 
 
-
+## Basic Investigation  
+  
+  Counts of buildings and meters and (buildings and meters).
 ```{r}
 
 cnts_bldg_mtr <-
-  files_list$train.csv %>% 
+  files_list$train %>% 
   count(building_id,
         meter,
         # timestamp
         ) %>% 
+  left_join(y = files_list$train %>% 
+              filter(meter_reading > 0) %>% 
+              count(building_id,
+                    meter
+                    ) %>% 
+              rename(n_non0 = n),
+            by = c("building_id" = "building_id",
+                   "meter" = "meter"
+                   )
+            ) %>% 
+  mutate(n_non0_pct = n_non0 / n) %>% 
   arrange(building_id,
           meter
           )
 
 cnts_bldg_mtr
 
-cnts_bldg_mtr_reading_abv_zero <-
-  files_list$train.csv %>% 
-  filter(meter_reading > 0) %>% 
-  count(building_id,
-        meter,
-        # timestamp
-        ) %>% 
-  arrange(building_id,
-          meter
-          )
 
-cnts_bldg_mtr_reading_abv_zero
+
+cnts_bldg <-
+  cnts_bldg_mtr %>% 
+  count(building_id,
+        wt = n
+        ) %>% 
+  left_join(y = cnts_bldg_mtr %>% 
+              count(building_id,
+                    wt = n_non0
+                    ) %>% 
+              rename(n_non0 = n),
+            by = "building_id"
+            ) %>% 
+  mutate(n_non0_pct = n_non0 / n)
+
+cnts_bldg
 
 
 cnts_mtr <-
   cnts_bldg_mtr %>% 
   count(meter,
         wt = n
-        )
+        ) %>% 
+  left_join(y = cnts_bldg_mtr %>% 
+              count(meter,
+                    wt = n_non0
+                    ) %>% 
+              rename(n_non0 = n),
+            by = "meter"
+            ) %>% 
+  mutate(n_non0_pct = n_non0 / n)
 
 cnts_mtr
 
 
-cnts_mtr_reading_abv_zero <-
-  cnts_bldg_mtr_reading_abv_zero %>% 
-  count(meter,
-        wt = n
-        )
 
-cnts_mtr_reading_abv_zero
+files_list$building_metadata %>% 
+  count(primary_use) %>% 
+  arrange(desc(n))
 
 
-files_list$building_metadata.csv %>% 
-  count(primary_use)
+rm(cnts_bldg_mtr, cnts_bldg, cnts_mtr)
 
 ```
-
-
+  
+    
+  Create a full dataset.
 ```{r}
 
 joined_data <-
-  # files_list$train.csv %>%
-  # left_join(y = files_list$building_metadata.csv,
+  # files_list$train %>%
+  # left_join(y = files_list$building_metadata,
   #           by = c("building_id" = "building_id")
   #           ) %>%
-  # left_join(y = files_list$weather_train.csv,
+  # left_join(y = files_list$weather_train,
   #           by = c("site_id" = "site_id",
   #                  "timestamp" = "timestamp"
   #                  )
@@ -186,12 +227,12 @@ joined_data <-
   #         meter,
   #         timestamp
   #         )
-  files_list$train.csv %>% 
-  bind_rows(files_list$test.csv,
-            .id = "data_type"
-            ) %>% 
-  merge(#x = files_list$train.csv,
-        y = files_list$building_metadata.csv,
+  # files_list$train %>% 
+  # bind_rows(files_list$test,
+  #           .id = "data_type"
+  #           ) %>% 
+  merge(x = files_list$train,
+        y = files_list$building_metadata,
         by.x = "building_id",
         by.y = "building_id",
         all.x = TRUE
@@ -199,7 +240,7 @@ joined_data <-
 
 joined_data <-
   merge(x = joined_data,
-        y = files_list$weather_train.csv,
+        y = files_list$weather_train,
         by.x = c("site_id", "timestamp"),
         by.y = c("site_id", "timestamp"),
         all.x = TRUE
@@ -208,11 +249,11 @@ joined_data <-
 joined_data <-
   joined_data[ , `:=` (timestamp = as_datetime(timestamp),
                        primary_use = factor(primary_use),
-                       meter_reading_log = log(meter_reading + 1),
-                       data_type = if_else(data_type == "1",
-                                           "train",
-                                           "test"
-                                           ) %>% factor()
+                       meter_reading_log = log(meter_reading + 1)#,
+                       # data_type = if_else(data_type == "1",
+                       #                     "train",
+                       #                     "test"
+                       #                     ) %>% factor()
                        )
                ] %>% 
   setkey(building_id,
@@ -224,38 +265,68 @@ joined_data <-
 # dim(joined_data)
 class(joined_data)
 str(joined_data)
-glimpse(joined_data)
+# glimpse(joined_data)
 # View(head(joined_data, 1000))
 
 ```
-
-
+  
+    
+  Investigate times and counts of the training and test sets. Essentially, we need to use ~1 year of data, to predict the next ~2 years.
 ```{r}
 
+train_test <-
+  files_list$train %>% 
+  bind_rows(files_list$test,
+            .id = "data_type"
+            )
+
+train_test <- train_test[ , `:=` (data_type = if_else(data_type == "1",
+                                                      "1_train",
+                                                      "2_test"
+                                                      )
+                                  )
+                          ]
+
+
 cnts_train_test_bld_mtr <-
-  joined_data[ ,
+  train_test[ ,
               .(timestamp_min = min(timestamp, na.rm = TRUE),
                 timestamp_max = max(timestamp, na.rm = TRUE),
                 cnt_days = .N / 24
                 ),
               by = list(data_type, building_id, meter)
-              ][order(building_id, meter, -data_type)]
+              ][order(building_id, meter, data_type)]
 
 View(cnts_train_test_bld_mtr)
-# joined_data %>% 
-#   split(.$data_type) %>% 
-#   map(~summary(.x$meter_reading))
+
+
+rm(cnts_train_test_bld_mtr)
 
 ```
 
+    
+  Counts of positive meter readings by `primary_use`.
+```{r}
 
-
+joined_data %>% 
+  count(primary_use) %>% 
+  left_join(joined_data %>% 
+              filter(meter_reading_log > 0) %>% 
+              count(primary_use) %>% 
+              rename(n_reading_abv_0 = n),
+            by = "primary_use"
+            ) %>% 
+  mutate(n_reading_abv_0_pct = n_reading_abv_0 / n) %>% 
+  arrange(desc(n_reading_abv_0_pct))
+            
+```  
+  
+    
+  Quick investigation using line plots. It looks like there are often zero values - mostly before and/or after the "main" dataset.
 ```{r}
 
 split_first_10_bldgs <-
-  joined_data[building_id < 10 &
-                data_type == "train"
-              ] %>% 
+  joined_data[building_id < 10] %>% 
   split(.$building_id)
 
 # split_first_10_bldgs$`0` %>% 
@@ -295,53 +366,41 @@ line_plots <-
 
 line_plots
 
-```
 
+rm(line_plots)
 
-```{r}
-
-joined_data[data_type == "train"] %>% 
-  count(primary_use) %>% 
-  left_join(joined_data[data_type == "train"] %>% 
-              filter(meter_reading_log > 0) %>% 
-              count(primary_use) %>% 
-              rename(n_reading_abv_0 = n),
-            by = "primary_use"
-            ) %>% 
-  mutate(n_reading_abv_0_pct = n_reading_abv_0 / n)
-            
 ```
   
     
-  Inspect if train and test have the same combinations of `building_id` and `meter`.
+  Inspect if train and test have the same combinations of `building_id` and `meter`. There are no unknown combinations of `building_id` and `meter` being asked to predict.
 ```{r}
 
 bldg_mtr_train <-
-  joined_data[data_type == "train",
-              list(building_id, meter)
-              ][ ,
-                bldg_mtr := paste0(building_id, "_", meter)
-                ][order(building_id,
-                        meter
-                        )
-                  ]
+  train_test[data_type == "1_train",
+             list(building_id, meter)
+             ][ ,
+               bldg_mtr := paste0(building_id, "_", meter)
+               ][order(building_id,
+                       meter
+                       )
+               ]
 
 message("bldg_mtr_train")
-str(bldg_mtr_train)
+dim(bldg_mtr_train)
 
 
 bldg_mtr_test <-
-  joined_data[data_type == "test",
-              list(building_id, meter)
-              ][ ,
-                bldg_mtr := paste0(building_id, "_", meter)
-                ][order(building_id,
-                        meter
-                        )
-                  ]
+  train_test[data_type == "2_test",
+             list(building_id, meter)
+             ][ ,
+               bldg_mtr := paste0(building_id, "_", meter)
+               ][order(building_id,
+                       meter
+                       )
+               ]
 
 message("bldg_mtr_test")
-str(bldg_mtr_test)
+dim(bldg_mtr_test)
 
 
 message("setdiff")
@@ -354,17 +413,20 @@ setdiff(x = unique(bldg_mtr_train$bldg_mtr),
 rm(bldg_mtr_train, bldg_mtr_test)
 
 ```
+  
+    
+  Remove no-longer-needed files.
+```{r}
+
+rm(files_list)
+
+```
+
 
 
 ```{r}
 
-joined_data_train <-
-  joined_data[data_type == "train"]
 
-glimpse(joined_data_train)
-
-
-rm(joined_data)
 
 ```
 
