@@ -474,21 +474,36 @@ tic()
 
 rolling_test_zoo <-
   joined_data[ ,
-               `:=` (mean_roll_1day = rollmean(x = meter_reading_log,
-                                               k = 24,
-                                               na.pad = TRUE,
-                                               align = "right"
-                                               ),
-                     mean_roll_2day = rollmean(x = meter_reading_log,
-                                               k = (24 * 2),
-                                               na.pad = TRUE,
-                                               align = "right"
-                                               ),
-                     mean_roll_7day = rollmean(x = meter_reading_log,
-                                               k = (24 * 7),
-                                               na.pad = TRUE,
-                                               align = "right"
-                                               )
+               `:=` (r_mean_roll_1day = rollmean(x = meter_reading_log,
+                                                 k = 24,
+                                                 na.pad = TRUE,
+                                                 align = "right"
+                                                 ),
+                     r_mean_roll_2day = rollmean(x = meter_reading_log,
+                                                 k = (24 * 2),
+                                                 na.pad = TRUE,
+                                                 align = "right"
+                                                 ),
+                     r_mean_roll_7day = rollmean(x = meter_reading_log,
+                                                 k = (24 * 7),
+                                                 na.pad = TRUE,
+                                                 align = "right"
+                                                 ),
+                     l_mean_roll_1day = rollmean(x = meter_reading_log,
+                                                 k = 24,
+                                                 na.pad = TRUE,
+                                                 align = "left"
+                                                 ),
+                     l_mean_roll_2day = rollmean(x = meter_reading_log,
+                                                 k = (24 * 2),
+                                                 na.pad = TRUE,
+                                                 align = "left"
+                                                 ),
+                     l_mean_roll_7day = rollmean(x = meter_reading_log,
+                                                 k = (24 * 7),
+                                                 na.pad = TRUE,
+                                                 align = "left"
+                                                 )
                      ),
                by = list(building_id, meter)
               ]
@@ -498,6 +513,7 @@ toc()
 
 str(rolling_test_zoo)
 View(rolling_test_zoo %>% head(1000))
+View(rolling_test_zoo %>% tail(1000))
 
 
 # rm(joined_data)
@@ -510,7 +526,7 @@ View(rolling_test_zoo %>% head(1000))
 
 split_first_10_bldgs <-
   rolling_test_zoo[building_id < 10] %>% 
-  filter(mean_roll_1day > 0) %>% 
+  filter(r_mean_roll_1day > 0) %>% 
   split(.$building_id)
 
 # split_first_10_bldgs$`0` %>% 
@@ -609,6 +625,112 @@ rm(line_plots)
 
 
 
+
+
+```{r}
+
+test_hourly_overyear <-
+  rolling_test_zoo[site_id < 10] %>% 
+  split(.$site_id)
+
+test_hourly_overyear <-
+  pmap(.l = list(a = test_hourly_overyear),
+       .f = function(a) {
+         dat = a[ ,
+                 .(timestamp,
+                   air_temperature
+                   )
+                 ] %>% 
+           setkey(timestamp,
+                  air_temperature
+                  ) %>% 
+           unique()
+         
+         dat = dat[ ,
+                   `:=` (wkday = wday(timestamp, label = TRUE),
+                         hr = hour(timestamp)
+                         )
+                   ]
+         
+         return(dat)
+         }
+       )
+
+test_hourly_overyear$`0` %>% str()
+View(test_hourly_overyear$`0`)
+
+```
+
+
+
+```{r}
+
+line_hrly_overyear <-
+  pmap(.l = list(a = test_hourly_overyear,
+                 b = names(test_hourly_overyear)
+                 ),
+       .f = function(a, b) {
+         ggplot(data = a,
+                aes(x = timestamp,
+                    y = air_temperature
+                    )
+                ) +
+           geom_line() +
+           theme_minimal() +
+           labs(title = paste0("site_id: ", b)
+                ) +
+           NULL
+         }
+       )
+
+line_hrly_overyear
+
+```
+
+
+
+```{r}
+
+test_hourly_overday <-
+  pmap(.l = list(a = test_hourly_overyear),
+       .f = function(a) {
+         dat = a[ ,
+                 .(temp_air_mean = mean(air_temperature, na.rm = TRUE)
+                   ),
+                 by = list(wkday, hr)
+                 ]
+         
+         return(dat)
+         }
+       )
+  
+glimpse(test_hourly_overday$`0`)
+View(test_hourly_overday$`0`)
+
+
+pmap(.l = list(a = test_hourly_overday,
+               b = names(test_hourly_overday)
+               ),
+     .f = function(a, b) {
+       a %>% 
+         ggplot(aes(x = hr,
+                    y = temp_air_mean,
+                    colour = wkday
+                    )
+                ) +
+         geom_line() +
+         facet_wrap(vars(wkday)
+                    ) +
+         theme_minimal() +
+         theme(legend.position = "none") +
+         labs(title = paste0("site_id: ", b)
+                ) +
+         NULL
+       }
+     )
+
+
+```
 
 
 
