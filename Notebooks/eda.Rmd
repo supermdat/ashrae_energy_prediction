@@ -138,11 +138,38 @@ names(files_list) <-
 glimpse(files_list)
 
 ```
+  
+    
+  Quick update of formats.
+```{r}
+
+# colnames(files_list$weather_train) %>% has_element("timestamp")
+
+files_list <-
+  pmap(.l = list(a = files_list),
+       .f = function(a) {
+         if (colnames(a) %>% has_element("timestamp")
+             ) {
+           dat = a[ ,
+                   `:=` (timestamp = as_datetime(timestamp)
+                         )
+                   ]
+           } else {
+           dat = a
+           }
+         
+         return(dat)
+         }
+       )
+
+glimpse(files_list)
+
+```
 
 
 ## Basic Investigation  
   
-  Counts of buildings and meters and (buildings and meters).
+### Counts of buildings and meters and (buildings and meters).
 ```{r}
 
 cnts_bldg_mtr <-
@@ -213,8 +240,121 @@ files_list$building_metadata %>%
 rm(cnts_bldg_mtr, cnts_bldg, cnts_mtr)
 
 ```
+
+### Weather Inspection  
+  
+  Yearly Weather.
+```{r}
+
+test_hourly_overyear <-
+  files_list$weather_train[site_id < 10] %>% 
+  split(.$site_id)
+
+test_hourly_overyear <-
+  pmap(.l = list(a = test_hourly_overyear),
+       .f = function(a) {
+         dat = a[ ,
+                 .(timestamp,
+                   air_temperature
+                   )
+                 ] %>% 
+           setkey(timestamp,
+                  air_temperature
+                  ) %>% 
+           unique()
+         
+         dat = dat[ ,
+                   `:=` (wkday = wday(timestamp, label = TRUE),
+                         hr = hour(timestamp)
+                         )
+                   ]
+         
+         return(dat)
+         }
+       )
+
+test_hourly_overyear$`0` %>% str()
+View(test_hourly_overyear$`0`)
+
+```
   
     
+  Line graph yearly.
+```{r}
+
+line_hrly_overyear <-
+  pmap(.l = list(a = test_hourly_overyear,
+                 b = names(test_hourly_overyear)
+                 ),
+       .f = function(a, b) {
+         ggplot(data = a,
+                aes(x = timestamp,
+                    y = air_temperature
+                    )
+                ) +
+           geom_line() +
+           theme_minimal() +
+           labs(title = paste0("site_id: ", b)
+                ) +
+           NULL
+         }
+       )
+
+line_hrly_overyear
+
+```
+  
+    
+  Daily Weather
+```{r}
+
+test_hourly_overday <-
+  pmap(.l = list(a = test_hourly_overyear),
+       .f = function(a) {
+         dat = a[ ,
+                 .(temp_air_mean = mean(air_temperature, na.rm = TRUE)
+                   ),
+                 by = list(wkday, hr)
+                 ]
+         
+         return(dat)
+         }
+       )
+  
+glimpse(test_hourly_overday$`0`)
+View(test_hourly_overday$`0`)
+
+
+line_hrly_overday <-
+  pmap(.l = list(a = test_hourly_overday,
+                 b = names(test_hourly_overday)
+                 ),
+       .f = function(a, b) {
+         a %>% 
+           ggplot(aes(x = hr,
+                      y = temp_air_mean,
+                      colour = wkday
+                      )
+                  ) +
+           geom_line() +
+           facet_wrap(vars(wkday)
+                      ) +
+           theme_minimal() +
+           theme(legend.position = "none") +
+           labs(title = paste0("site_id: ", b)
+                ) +
+           NULL
+       }
+     )
+
+line_hrly_overday
+
+```
+
+
+    
+## Data Manipulation  
+  
   Create a full dataset.
 ```{r}
 
@@ -258,7 +398,7 @@ joined_data <-
         )
 
 joined_data <-
-  joined_data[ , `:=` (timestamp = as_datetime(timestamp),
+  joined_data[ , `:=` (# timestamp = as_datetime(timestamp),
                        primary_use = factor(primary_use),
                        meter_reading_log = log(meter_reading + 1)#,
                        # data_type = if_else(data_type == "1",
@@ -624,113 +764,6 @@ rm(line_plots)
 ```
 
 
-
-
-
-```{r}
-
-test_hourly_overyear <-
-  rolling_test_zoo[site_id < 10] %>% 
-  split(.$site_id)
-
-test_hourly_overyear <-
-  pmap(.l = list(a = test_hourly_overyear),
-       .f = function(a) {
-         dat = a[ ,
-                 .(timestamp,
-                   air_temperature
-                   )
-                 ] %>% 
-           setkey(timestamp,
-                  air_temperature
-                  ) %>% 
-           unique()
-         
-         dat = dat[ ,
-                   `:=` (wkday = wday(timestamp, label = TRUE),
-                         hr = hour(timestamp)
-                         )
-                   ]
-         
-         return(dat)
-         }
-       )
-
-test_hourly_overyear$`0` %>% str()
-View(test_hourly_overyear$`0`)
-
-```
-
-
-
-```{r}
-
-line_hrly_overyear <-
-  pmap(.l = list(a = test_hourly_overyear,
-                 b = names(test_hourly_overyear)
-                 ),
-       .f = function(a, b) {
-         ggplot(data = a,
-                aes(x = timestamp,
-                    y = air_temperature
-                    )
-                ) +
-           geom_line() +
-           theme_minimal() +
-           labs(title = paste0("site_id: ", b)
-                ) +
-           NULL
-         }
-       )
-
-line_hrly_overyear
-
-```
-
-
-
-```{r}
-
-test_hourly_overday <-
-  pmap(.l = list(a = test_hourly_overyear),
-       .f = function(a) {
-         dat = a[ ,
-                 .(temp_air_mean = mean(air_temperature, na.rm = TRUE)
-                   ),
-                 by = list(wkday, hr)
-                 ]
-         
-         return(dat)
-         }
-       )
-  
-glimpse(test_hourly_overday$`0`)
-View(test_hourly_overday$`0`)
-
-
-pmap(.l = list(a = test_hourly_overday,
-               b = names(test_hourly_overday)
-               ),
-     .f = function(a, b) {
-       a %>% 
-         ggplot(aes(x = hr,
-                    y = temp_air_mean,
-                    colour = wkday
-                    )
-                ) +
-         geom_line() +
-         facet_wrap(vars(wkday)
-                    ) +
-         theme_minimal() +
-         theme(legend.position = "none") +
-         labs(title = paste0("site_id: ", b)
-                ) +
-         NULL
-       }
-     )
-
-
-```
 
 
 
