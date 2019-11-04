@@ -21,6 +21,12 @@ library("tidyquant")    # rolling calculations
 library("lubridate")
 
 
+# viz
+library("plotly")
+
+
+
+
 library("tictoc")
 
 # get tweets
@@ -148,6 +154,7 @@ glimpse(files_list)
 files_list <-
   pmap(.l = list(a = files_list),
        .f = function(a) {
+         # update timestamp
          if (colnames(a) %>% has_element("timestamp")
              ) {
            dat = a[ ,
@@ -158,7 +165,18 @@ files_list <-
            dat = a
            }
          
-         return(dat)
+         # create meter_reading logged
+         if (colnames(dat) %>% has_element("meter_reading")
+             ) {
+           dat2 = dat[ ,
+                      `:=` (meter_reading_log = log(meter_reading + 1)
+                            )
+                      ]
+           } else {
+           dat2 = dat
+           }
+         
+         return(dat2)
          }
        )
 
@@ -352,6 +370,137 @@ line_hrly_overday
 ```
 
 
+### Energy Use Inspection  
+  
+  Limit to certain buildings.
+```{r}
+
+map_sites_buildings <-
+  files_list$building_metadata[site_id < 10,
+                               .(site_id,
+                                 building_id
+                                 )
+                               ] %>% 
+  unique()
+
+# View(map_sites_buildings)
+
+
+buildings <-
+  files_list$train[meter == 0 &
+                     building_id %in% map_sites_buildings$building_id
+                   ][ ,
+                     `:=` (date = as_date(timestamp),
+                           wkday = wday(timestamp, label = TRUE),
+                           hr = hour(timestamp)
+                           )
+                     ]
+
+buildings <-
+  buildings %>% 
+  merge(y = files_list$building_metadata,
+        by.x = "building_id",
+        by.y = "building_id",
+        all.x = TRUE
+        ) %>% 
+  setkey(site_id,
+         building_id,
+         timestamp
+         )
+
+str(buildings)
+
+# View(buildings %>% head(1000))
+
+```
+
+
+```{r}
+
+meter_reading_by_site_day_hr <-
+  buildings[ ,
+            .(meter_reading_mean = mean(meter_reading, na.rm = TRUE)
+              ),
+            by = list(site_id, wkday, hr)
+            ] %>% 
+  split(.$site_id)
+
+str(meter_reading_by_site_day_hr$`0`)
+
+
+line_hrly_energy_overday <-
+  pmap(.l = list(a = meter_reading_by_site_day_hr,
+                 b = names(meter_reading_by_site_day_hr)
+                 ),
+       .f = function(a, b) {
+         ggplot(data = a,
+                aes(x = hr,
+                    y = meter_reading_mean,
+                    colour = wkday
+                    )
+                ) +
+           geom_line() +
+           facet_wrap(vars(wkday)
+                      ) +
+           labs(title = paste0("Electric Readings \n", "site_id: ", b)
+                ) +
+           theme_minimal() +
+           theme(legend.position = "none") +
+           NULL
+       }
+     )
+
+line_hrly_energy_overday
+
+```
+
+
+
+```{r}
+
+meter_reading_by_site_day <-
+  buildings[ ,
+            .(meter_reading_mean = mean(meter_reading, na.rm = TRUE)
+              ),
+            by = list(site_id, date)
+            ] %>% 
+  split(.$site_id)
+
+str(meter_reading_by_site_day$`0`)
+
+
+line_daily_energy_overyr <-
+  pmap(.l = list(a = meter_reading_by_site_day,
+                 b = names(meter_reading_by_site_day)
+                 ),
+       .f = function(a, b) {
+         ggplot(data = a,
+                aes(x = date,
+                    y = meter_reading_mean,
+                    colour = site_id
+                    )
+                ) +
+           geom_line() +
+           # facet_wrap(vars(site_id)
+           #            ) +
+           labs(title = paste0("Electric Readings \n", "site_id: ", b)
+                ) +
+           theme_minimal() +
+           theme(legend.position = "none") +
+           NULL
+       }
+     )
+
+line_daily_energy_overyr
+line_daily_energy_overyr %>% map(~ggplotly(.x))
+
+```
+
+
+
+
+
+
     
 ## Data Manipulation  
   
@@ -399,8 +548,8 @@ joined_data <-
 
 joined_data <-
   joined_data[ , `:=` (# timestamp = as_datetime(timestamp),
-                       primary_use = factor(primary_use),
-                       meter_reading_log = log(meter_reading + 1)#,
+                       primary_use = factor(primary_use) #,
+                       # meter_reading_log = log(meter_reading + 1)#,
                        # data_type = if_else(data_type == "1",
                        #                     "train",
                        #                     "test"
@@ -763,6 +912,15 @@ rm(line_plots)
 
 ```
 
+
+
+
+
+```{r}
+
+# rm(buildings, joined_data, rolling_test_zoo, train_test)
+
+```
 
 
 
